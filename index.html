@@ -143,6 +143,8 @@
   const CONFIDENCE_THRESHOLD = 0.25;
   const INFERENCE_INTERVAL_MS = 900;
 
+  let rfModel = null;
+
   let sessionTotal = 0, isRunning = false, modelReady = false;
   let lastFpsTime = Date.now(), frameCount = 0, notifTimer = null;
   let lastInferenceTime = 0, predictions = [];
@@ -168,24 +170,36 @@
   const modeBadge = document.getElementById('mode-badge');
 
   async function loadModel() {
-    // Pula verificação, vai direto como pronto
     try {
-      progressBar.style.width = '40%';
-      // verificação removida
-      if (true) {
-        modelReady = true;
-        progressBar.style.width = '100%';
-        loadingMsg.innerHTML = '✅ Modelo de coco verde pronto!<br><b>78% de precisão</b> — treinado com suas fotos.';
-        modeBadge.textContent = '🥥 IA 78% precisão';
-        modeBadge.style.color = '#c8e64a';
-        modeBadge.style.borderColor = '#c8e64a';
-      } else throw new Error();
+      progressBar.style.width = '30%';
+      loadingMsg.innerHTML = 'Carregando biblioteca de IA...';
+      // Carrega inferencejs dinamicamente
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.roboflow.com/0.2.26/roboflow.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      progressBar.style.width = '60%';
+      loadingMsg.innerHTML = 'Carregando modelo de coco verde...';
+      rfModel = await roboflow.auth({ publishable_key: RF_API_KEY })
+        .load({ model: RF_PROJECT, version: RF_VERSION, onProgress: p => { progressBar.style.width = (60 + p*40) + '%'; } });
+      rfModel.configure({ threshold: CONFIDENCE_THRESHOLD, overlap: 0.3, max_objects: 100 });
+      modelReady = true;
+      progressBar.style.width = '100%';
+      loadingMsg.innerHTML = '✅ Modelo de coco verde pronto!<br><b>78% de precisão</b> — treinado com suas fotos.';
+      modeBadge.textContent = '🥥 IA 78% precisão';
+      modeBadge.style.color = '#c8e64a';
+      modeBadge.style.borderColor = '#c8e64a';
     } catch(e) {
       progressBar.style.width = '100%';
-      loadingMsg.innerHTML = '⚠️ Sem internet no momento.<br>Use o botão +1 para contar manualmente.';
+      loadingMsg.innerHTML = '⚠️ Erro ao carregar modelo: ' + e.message + '<br>Use o botão +1 para contar manualmente.';
       modeBadge.textContent = 'Modo Manual';
       modeBadge.style.color = '#ff6b35';
       modeBadge.style.borderColor = '#ff6b35';
+      const debug = document.getElementById('debug-msg');
+      if (debug) debug.textContent = 'Erro loadModel: ' + e.message;
     }
     btnStart.style.display = 'block';
   }
@@ -221,25 +235,25 @@
   }
 
   async function runInference() {
-    if (!modelReady) return [];
+    if (!modelReady || !rfModel) return [];
     try {
-      const res = await fetch(
-        `https://detect.roboflow.com/${RF_PROJECT}/${RF_VERSION}?api_key=${RF_API_KEY}&confidence=${Math.round(CONFIDENCE_THRESHOLD*100)}&overlap=30`,
-        { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: captureFrame() }
-      );
-      const data = await res.json();
-      // Debug: mostra resposta da API na tela
+      const img = new Image();
+      img.src = 'data:image/jpeg;base64,' + captureFrame();
+      await new Promise(r => { img.onload = r; });
+      const result = await rfModel.detect(img);
       const debug = document.getElementById('debug-msg');
-      if (debug) {
-        if (data.error) debug.textContent = 'ERRO: ' + data.error;
-        else if (data.predictions) debug.textContent = 'OK: ' + data.predictions.length + ' detecções | status ' + res.status;
-        else debug.textContent = 'Resposta: ' + JSON.stringify(data).slice(0, 80);
-      }
-      if (!res.ok) return [];
-      return data.predictions || [];
+      if (debug) debug.textContent = 'OK: ' + result.length + ' detecções';
+      return result.map(r => ({
+        x: r.bbox.x + r.bbox.width / 2,
+        y: r.bbox.y + r.bbox.height / 2,
+        width: r.bbox.width,
+        height: r.bbox.height,
+        confidence: r.confidence,
+        class: r.class
+      }));
     } catch(e) {
       const debug = document.getElementById('debug-msg');
-      if (debug) debug.textContent = 'Erro de rede: ' + e.message;
+      if (debug) debug.textContent = 'Erro: ' + e.message;
       return [];
     }
   }
