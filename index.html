@@ -291,24 +291,36 @@
   function updateDisplay(preds) {
     const detected = preds.length;
     const maxConf = preds.length > 0 ? Math.max(...preds.map(p => p.confidence)) : 0;
+
+    // Atualiza número principal
     if (bigCount.textContent !== String(detected)) {
       bigCount.textContent = detected;
       bigCount.classList.remove('bump'); void bigCount.offsetWidth; bigCount.classList.add('bump');
       setTimeout(() => bigCount.classList.remove('bump'), 150);
     }
+
+    // Confiança
     if (maxConf > 0) { confidenceVal.textContent = Math.round(maxConf*100)+'%'; confidenceBar.style.width = Math.round(maxConf*100)+'%'; }
     else { confidenceVal.textContent = '–'; confidenceBar.style.width = '0%'; }
-    if (detected === prevCount) stableCount++; else { stableCount=0; prevCount=detected; }
-    if (stableCount === STABLE_FRAMES && detected > 0 && detected !== lastNotifiedCount) {
-      if (detected > lastNotifiedCount && lastNotifiedCount >= 0) {
-        const diff = detected - lastNotifiedCount;
-        sessionTotal += diff;
-        sessionCountEl.textContent = sessionTotal+' cocos';
-        showNotif(`+${diff} coco${diff>1?'s':''} detectado${diff>1?'s':''}!`);
+
+    // Estabiliza por N frames
+    if (detected === prevCount) stableCount++;
+    else { stableCount = 0; prevCount = detected; }
+
+    // Quando estabilizar em novo valor, registra no total da sessão
+    if (stableCount === STABLE_FRAMES && detected !== lastNotifiedCount) {
+      if (detected > 0) {
+        // Substitui o último valor registrado pelo novo
+        const ultimo = lastNotifiedCount > 0 ? lastNotifiedCount : 0;
+        sessionTotal = sessionTotal - ultimo + detected;
+        if (sessionTotal < detected) sessionTotal = detected;
+        sessionCountEl.textContent = sessionTotal + ' cocos';
+        showNotif(detected + ' coco' + (detected>1?'s':'') + ' na cena!');
+      } else {
+        // Sumiu da cena — não subtrai do total, só reseta o ultimo
       }
       lastNotifiedCount = detected;
     }
-    if (detected === 0) lastNotifiedCount = 0;
   }
 
   function showNotif(msg) {
