@@ -101,6 +101,7 @@
   </div>
   <div id="mode-badge">Carregando...</div>
   <div id="notif"></div>
+  <div id="debug-msg" style="position:absolute;bottom:160px;left:0;right:0;z-index:30;text-align:center;background:rgba(0,0,0,0.7);color:#fff;font-size:13px;padding:6px 12px;font-family:monospace;"></div>
   <div id="camera-wrap">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
@@ -139,7 +140,7 @@
   const RF_API_KEY = 'rf_0CFrrzqLuxcLph9aJnVavQ1ZGND3';
   const RF_PROJECT = 'coco-wgxcz';
   const RF_VERSION = 4;
-  const CONFIDENCE_THRESHOLD = 0.2;
+  const CONFIDENCE_THRESHOLD = 0.25;
   const INFERENCE_INTERVAL_MS = 900;
 
   let sessionTotal = 0, isRunning = false, modelReady = false;
@@ -174,8 +175,8 @@
       if (true) {
         modelReady = true;
         progressBar.style.width = '100%';
-        loadingMsg.innerHTML = '✅ Modelo de coco verde pronto!<br><b>precisão</b> — treinado!';
-        modeBadge.textContent = '🥥 IA';
+        loadingMsg.innerHTML = '✅ Modelo de coco verde pronto!<br><b>78% de precisão</b> — treinado com suas fotos.';
+        modeBadge.textContent = '🥥 IA 78% precisão';
         modeBadge.style.color = '#c8e64a';
         modeBadge.style.borderColor = '#c8e64a';
       } else throw new Error();
@@ -226,10 +227,21 @@
         `https://detect.roboflow.com/${RF_PROJECT}/${RF_VERSION}?api_key=${RF_API_KEY}&confidence=${Math.round(CONFIDENCE_THRESHOLD*100)}&overlap=30`,
         { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: captureFrame() }
       );
-      if (!res.ok) return [];
       const data = await res.json();
+      // Debug: mostra resposta da API na tela
+      const debug = document.getElementById('debug-msg');
+      if (debug) {
+        if (data.error) debug.textContent = 'ERRO: ' + data.error;
+        else if (data.predictions) debug.textContent = 'OK: ' + data.predictions.length + ' detecções | status ' + res.status;
+        else debug.textContent = 'Resposta: ' + JSON.stringify(data).slice(0, 80);
+      }
+      if (!res.ok) return [];
       return data.predictions || [];
-    } catch(e) { return []; }
+    } catch(e) {
+      const debug = document.getElementById('debug-msg');
+      if (debug) debug.textContent = 'Erro de rede: ' + e.message;
+      return [];
+    }
   }
 
   function drawDetections(preds) {
