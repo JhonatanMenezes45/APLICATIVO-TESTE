@@ -148,8 +148,7 @@
   let sessionTotal = 0, isRunning = false, modelReady = false;
   let lastFpsTime = Date.now(), frameCount = 0, notifTimer = null;
   let lastInferenceTime = 0, predictions = [];
-  let lastNotifiedCount = 0, stableCount = 0, prevCount = -1;
-  const STABLE_FRAMES = 4;
+  let lastDetected = -1;
   let historico = [];
   try { historico = JSON.parse(localStorage.getItem('coco_historico') || '[]'); } catch(e) {}
 
@@ -186,7 +185,7 @@
       );
       modelReady = true;
       progressBar.style.width = '100%';
-      loadingMsg.innerHTML = '✅ Modelo pronto!<br><b>MODELO TESTE BETA 15 </b> — treinado com suas fotos.';
+      loadingMsg.innerHTML = '✅ Modelo pronto!<br><b>beta 16</b> — treinado com suas fotos.';
       modeBadge.textContent = '🥥 IA 78% precisão';
       modeBadge.style.color = '#c8e64a';
       modeBadge.style.borderColor = '#c8e64a';
@@ -303,25 +302,21 @@
     if (maxConf > 0) { confidenceVal.textContent = Math.round(maxConf*100)+'%'; confidenceBar.style.width = Math.round(maxConf*100)+'%'; }
     else { confidenceVal.textContent = '–'; confidenceBar.style.width = '0%'; }
 
-    // Estabiliza por N frames
-    if (detected === prevCount) stableCount++;
-    else { stableCount = 0; prevCount = detected; }
-
-    // Quando estabilizar em novo valor, registra no total da sessão
-    if (stableCount >= STABLE_FRAMES && detected !== lastNotifiedCount) {
-      if (detected > lastNotifiedCount) {
-        // Detectou mais cocos — adiciona a diferença
-        const diff = detected - lastNotifiedCount;
-        sessionTotal += diff;
-        sessionCountEl.textContent = sessionTotal + ' cocos';
-        showNotif('+' + diff + ' coco' + (diff>1?'s':'') + ' detectado' + (diff>1?'s':'') + '!');
+    // Contabiliza se mudou desde a última detecção
+    if (detected !== lastDetected) {
+      if (detected > 0) {
+        const diff = detected - Math.max(lastDetected, 0);
+        if (diff > 0) {
+          sessionTotal += diff;
+          sessionCountEl.textContent = sessionTotal + ' cocos';
+          showNotif('+' + diff + ' coco' + (diff>1?'s':'') + ' detectado' + (diff>1?'s':'') + '!');
+        }
       }
-      lastNotifiedCount = detected;
-      stableCount = 0; // reseta para só disparar uma vez por estabilização
+      lastDetected = detected;
     }
   }
 
-  function showNotif(msg) {
+    function showNotif(msg) {
     notif.textContent = msg; notif.classList.add('show');
     clearTimeout(notifTimer);
     notifTimer = setTimeout(() => notif.classList.remove('show'), 2500);
@@ -342,7 +337,7 @@
     historico.unshift({ cocos: sessionTotal, hora: agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), data: agora.toLocaleDateString('pt-BR'), tipo: modelReady ? 'IA 78%' : 'Manual' });
     try { localStorage.setItem('coco_historico', JSON.stringify(historico)); } catch(e) {}
     const saved = sessionTotal;
-    sessionTotal = 0; sessionCountEl.textContent = '0 cocos'; bigCount.textContent = '0'; lastNotifiedCount = -1;
+    sessionTotal = 0; sessionCountEl.textContent = '0 cocos'; bigCount.textContent = '0'; lastDetected = -1;
     showNotif(`✅ ${saved} cocos salvos!`);
   }
 
